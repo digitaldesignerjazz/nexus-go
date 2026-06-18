@@ -50,7 +50,7 @@ Commands:
   version   Print version information
   doctor    Check environment prerequisites and Nexus readiness
   start     Orchestrate startup of Nexus components (mesh, blockchain, ai, prototypes)
-  serve     Start HTTP health server (for Docker/K8s healthchecks)
+  serve     Start HTTP server with health and readiness endpoints
 
 Flags (for start):
   --component string   Components to start (default "all")
@@ -58,10 +58,14 @@ Flags (for start):
   --execute            Perform live execution
   --force              Skip some safety prompts
 
+Flags (for serve):
+  --port string        Port to listen on (default "8080")
+
 Examples:
   nexus-go doctor
   nexus-go start --component=all
-  nexus-go serve --port 8080
+  nexus-go serve
+  nexus-go serve --port=9090
 
 For full documentation see README.md
 `)
@@ -73,7 +77,7 @@ func printVersion() {
 	fmt.Println("Part of Esslinger & Co. Nexus Ecosystem - June 2026")
 }
 
-// runServe starts a simple HTTP server with health endpoint
+// runServe starts a simple HTTP server with health and readiness endpoints
 func runServe() {
 	port := "8080"
 
@@ -86,9 +90,13 @@ func runServe() {
 
 	http.HandleFunc("/healthz", healthHandler)
 	http.HandleFunc("/health", healthHandler)
+	http.HandleFunc("/readyz", readyHandler)
+	http.HandleFunc("/ready", readyHandler)
 
-	fmt.Printf("Starting nexus-go health server on :%s\n", port)
-	fmt.Println("Endpoints: /healthz , /health")
+	fmt.Printf("Starting nexus-go HTTP server on :%s\n", port)
+	fmt.Println("Endpoints:")
+	fmt.Println("  /healthz , /health   - Liveness probe")
+	fmt.Println("  /readyz  , /ready    - Readiness probe")
 
 	if err := http.ListenAndServe(":"+port, nil); err != nil {
 		fmt.Printf("Server failed: %v\n", err)
@@ -100,6 +108,16 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprintf(w, `{"status":"ok","service":"nexus-go","version":"%s","time":"%s"}\n`,
+		NexusGoVersion, time.Now().UTC().Format(time.RFC3339))
+}
+
+// readyHandler currently returns the same as health.
+// In future versions this can include actual readiness checks
+// (e.g. mesh connected, components initialized, doctor passed, etc.)
+func readyHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	fmt.Fprintf(w, `{"status":"ready","service":"nexus-go","version":"%s","time":"%s"}\n`,
 		NexusGoVersion, time.Now().UTC().Format(time.RFC3339))
 }
 
@@ -166,7 +184,6 @@ func runStart() {
 			force = true
 		case arg == "--verbose":
 			verbose = true
-		}
 	}
 
 	if execute {
