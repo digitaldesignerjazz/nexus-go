@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"runtime"
@@ -30,6 +31,8 @@ func main() {
 		runDoctor()
 	case "start":
 		runStart()
+	case "serve":
+		runServe()
 	default:
 		fmt.Printf("Unknown command: %s\n", cmd)
 		printHelp()
@@ -47,20 +50,20 @@ Commands:
   version   Print version information
   doctor    Check environment prerequisites and Nexus readiness
   start     Orchestrate startup of Nexus components (mesh, blockchain, ai, prototypes)
+  serve     Start HTTP health server (for Docker/K8s healthchecks)
 
 Flags (for start):
-  --component string   Components to start: all, mesh, blockchain, ai, prototypes, grok (default "all")
+  --component string   Components to start (default "all")
   --dry-run bool       Preview commands without executing (default true)
-  --execute            Alias for --dry-run=false (live execution, use with caution)
+  --execute            Perform live execution
   --force              Skip some safety prompts
-  --verbose            Detailed output
 
 Examples:
   nexus-go doctor
-  nexus-go start --component=mesh
-  nexus-go start --all --dry-run=false --force
+  nexus-go start --component=all
+  nexus-go serve --port 8080
 
-For full documentation see README.md or https://github.com/digitaldesignerjazz/nexus-go
+For full documentation see README.md
 `)
 }
 
@@ -68,6 +71,36 @@ func printVersion() {
 	fmt.Printf("nexus-go version %s\n", NexusGoVersion)
 	fmt.Printf("Go version: %s %s/%s\n", runtime.Version(), runtime.GOOS, runtime.GOARCH)
 	fmt.Println("Part of Esslinger & Co. Nexus Ecosystem - June 2026")
+}
+
+// runServe starts a simple HTTP server with health endpoint
+func runServe() {
+	port := "8080"
+
+	// Simple flag parsing for port
+	for i := 2; i < len(os.Args); i++ {
+		if strings.HasPrefix(os.Args[i], "--port=") {
+			port = strings.TrimPrefix(os.Args[i], "--port=")
+		}
+	}
+
+	http.HandleFunc("/healthz", healthHandler)
+	http.HandleFunc("/health", healthHandler)
+
+	fmt.Printf("Starting nexus-go health server on :%s\n", port)
+	fmt.Println("Endpoints: /healthz , /health")
+
+	if err := http.ListenAndServe(":"+port, nil); err != nil {
+		fmt.Printf("Server failed: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func healthHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	fmt.Fprintf(w, `{"status":"ok","service":"nexus-go","version":"%s","time":"%s"}\n`,
+		NexusGoVersion, time.Now().UTC().Format(time.RFC3339))
 }
 
 func runDoctor() {
@@ -103,7 +136,6 @@ func runDoctor() {
 	}
 
 	fmt.Println("\n=== Nexus-Specific Checks ===")
-	// Placeholder for future: check Yggdrasil config, peer connectivity, QCoin presence, etc.
 	fmt.Println("- Yggdrasil config: (future) check ~/.config/yggdrasil.conf or systemd unit")
 	fmt.Println("- Mesh peer bootstrap list: (future) validate diversity and uptime")
 	fmt.Println("- Blockchain node: (future) XCoin/QCoin binary or Docker image present")
@@ -114,7 +146,6 @@ func runDoctor() {
 }
 
 func runStart() {
-	// Simple flag parsing for demo (extend with flag package in v0.2)
 	component := "all"
 	dryRun := true
 	execute := false
@@ -152,7 +183,7 @@ func runStart() {
 	switch component {
 	case "all", "mesh":
 		startMesh(dryRun, verbose)
-		fallthrough // continue to others if all
+		fallthrough
 	case "blockchain":
 		if component == "all" || component == "blockchain" {
 			startBlockchain(dryRun, verbose)
@@ -169,7 +200,6 @@ func runStart() {
 	}
 
 	if component == "all" {
-		// already handled via fallthrough for mesh, but add others
 		startBlockchain(dryRun, verbose)
 		startAISwarm(dryRun, verbose)
 		startPrototypes(dryRun, verbose)
@@ -204,7 +234,6 @@ func startMesh(dryRun, verbose bool) {
 
 	if !dryRun {
 		fmt.Println("  [LIVE] Executing mesh startup sequence... (placeholder - implement exec in v0.2)")
-		// TODO: actual exec with error handling, idempotency checks
 	}
 
 	fmt.Println("Edge cases: Partition risk if <3 good peers; Tenda Nova WiFi tuning (channel, TX power vs privacy leak); config drift on restarts.")
