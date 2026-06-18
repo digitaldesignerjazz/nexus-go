@@ -1,4 +1,4 @@
-.PHONY: help build run doctor start-dry start-live clean tidy fmt vet docker-build docker-run
+.PHONY: help build run doctor start-dry start-live clean tidy fmt vet lint docker-build docker-run
 
 # Nexus-go Makefile
 # Go-based orchestrator for the full Nexus ecosystem (mesh + blockchain + AI swarms + prototypes)
@@ -22,6 +22,7 @@ help:
 	@echo "  make tidy           Run go mod tidy"
 	@echo "  make fmt            Format Go code"
 	@echo "  make vet            Run go vet"
+	@echo "  make lint           Run golangci-lint (requires golangci-lint installed)"
 	@echo "  make clean          Remove build artifacts"
 	@echo "  make docker-build   Build Docker image (nexus-go:latest)"
 	@echo "  make docker-run     Run the Docker container interactively"
@@ -29,8 +30,8 @@ help:
 	@echo "Examples:"
 	@echo "  make doctor"
 	@echo "  make start-dry"
+	@echo "  make lint"
 	@echo "  make docker-build && make docker-run"
-	@echo "  make build && ./bin/nexus-go start --component=mesh"
 	@echo ""
 
 build:
@@ -66,6 +67,9 @@ fmt:
 
 vet:
 	go vet ./...
+
+lint:
+	golangci-lint run ./...
 
 clean:
 	rm -rf $(BUILD_DIR)
