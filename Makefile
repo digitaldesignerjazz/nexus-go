@@ -1,4 +1,4 @@
-.PHONY: help build run doctor start-dry start-live clean tidy fmt vet lint docker-build docker-run
+.PHONY: help build run doctor start-dry start-live clean tidy fmt vet lint docker-build docker-push docker-run
 
 # Nexus-go Makefile
 # Go-based orchestrator for the full Nexus ecosystem (mesh + blockchain + AI swarms + prototypes)
@@ -22,16 +22,18 @@ help:
 	@echo "  make tidy           Run go mod tidy"
 	@echo "  make fmt            Format Go code"
 	@echo "  make vet            Run go vet"
-	@echo "  make lint           Run golangci-lint (requires golangci-lint installed)"
+	@echo "  make lint           Run golangci-lint"
 	@echo "  make clean          Remove build artifacts"
-	@echo "  make docker-build   Build Docker image (nexus-go:latest)"
+	@echo "  make docker-build   Build Docker image locally"
+	@echo "  make docker-push    Build and push multi-arch image to GHCR (requires login)"
 	@echo "  make docker-run     Run the Docker container interactively"
 	@echo ""
 	@echo "Examples:"
 	@echo "  make doctor"
 	@echo "  make start-dry"
 	@echo "  make lint"
-	@echo "  make docker-build && make docker-run"
+	@echo "  make docker-build"
+	@echo "  make docker-push"
 	@echo ""
 
 build:
@@ -80,7 +82,14 @@ clean:
 	@echo "Building Docker image nexus-go:latest..."
 	docker build -t nexus-go:latest .
 	@echo "Docker image built successfully."
-	@echo "Run with: make docker-run or docker run --rm -it nexus-go:latest"
+
+ docker-push:
+	@echo "Building and pushing multi-arch Docker image to GHCR..."
+	docker buildx build --platform linux/amd64,linux/arm64 \
+		-t ghcr.io/digitaldesignerjazz/nexus-go:latest \
+		-t ghcr.io/digitaldesignerjazz/nexus-go:$(git describe --tags --abbrev=0) \
+		--push .
+	@echo "Docker image pushed to GHCR."
 
  docker-run:
 	@echo "Running nexus-go container..."
