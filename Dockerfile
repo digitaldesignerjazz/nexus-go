@@ -33,5 +33,9 @@ RUN addgroup -g 1000 nexus && \
     adduser -D -u 1000 -G nexus nexus
 USER nexus
 
+# Healthcheck (verifies the binary is functional)
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD nexus-go version || exit 1
+
 ENTRYPOINT ["nexus-go"]
 CMD ["help"]
