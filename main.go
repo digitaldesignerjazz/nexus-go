@@ -19,6 +19,7 @@ const NexusGoVersion = "0.1.0"
 var (
 	systemReady     bool
 	systemReadyLock sync.RWMutex
+	startTime       = time.Now()
 )
 
 func setSystemReady(ready bool) {
@@ -31,6 +32,10 @@ func isSystemReady() bool {
 	systemReadyLock.RLock()
 	defer systemReadyLock.RUnlock()
 	return systemReady
+}
+
+func getUptime() time.Duration {
+	return time.Since(startTime)
 }
 
 func main() {
@@ -113,7 +118,7 @@ func runServe() {
 
 	fmt.Printf("Starting nexus-go HTTP server on :%s\n", port)
 	fmt.Println("Endpoints:")
-	fmt.Println("  /healthz , /health   - Liveness probe")
+	fmt.Println("  /healthz , /health   - Liveness probe (always returns 200 if server is running)")
 	fmt.Println("  /readyz  , /ready    - Readiness probe (reflects successful start --execute)")
 
 	if err := http.ListenAndServe(":"+port, nil); err != nil {
@@ -125,8 +130,17 @@ func runServe() {
 func healthHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprintf(w, `{"status":"ok","service":"nexus-go","version":"%s","time":"%s"}\n`,
-		NexusGoVersion, time.Now().UTC().Format(time.RFC3339))
+
+	uptime := getUptime().Round(time.Second)
+
+	fmt.Fprintf(w, `{
+  "status": "ok",
+  "service": "nexus-go",
+  "version": "%s",
+  "uptime": "%s",
+  "time": "%s"
+}
+`, NexusGoVersion, uptime, time.Now().UTC().Format(time.RFC3339))
 }
 
 // readyHandler returns 200 if system is ready, 503 otherwise
