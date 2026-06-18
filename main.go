@@ -8,11 +8,30 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 )
 
 // NexusGoVersion is the current version of the orchestrator
 const NexusGoVersion = "0.1.0"
+
+// systemReady indicates whether the Nexus orchestrator has successfully completed startup
+var (
+	systemReady     bool
+	systemReadyLock sync.RWMutex
+)
+
+func setSystemReady(ready bool) {
+	systemReadyLock.Lock()
+	systemReady = ready
+	systemReadyLock.Unlock()
+}
+
+func isSystemReady() bool {
+	systemReadyLock.RLock()
+	defer systemReadyLock.RUnlock()
+	return systemReady
+}
 
 func main() {
 	if len(os.Args) < 2 {
@@ -55,7 +74,7 @@ Commands:
 Flags (for start):
   --component string   Components to start (default "all")
   --dry-run bool       Preview commands without executing (default true)
-  --execute            Perform live execution
+  --execute            Perform live execution (marks system as ready)
   --force              Skip some safety prompts
 
 Flags (for serve):
@@ -63,7 +82,7 @@ Flags (for serve):
 
 Examples:
   nexus-go doctor
-  nexus-go start --component=all
+  nexus-go start --component=all --execute
   nexus-go serve
   nexus-go serve --port=9090
 
@@ -81,7 +100,6 @@ func printVersion() {
 func runServe() {
 	port := "8080"
 
-	// Simple flag parsing for port
 	for i := 2; i < len(os.Args); i++ {
 		if strings.HasPrefix(os.Args[i], "--port=") {
 			port = strings.TrimPrefix(os.Args[i], "--port=")
@@ -96,7 +114,7 @@ func runServe() {
 	fmt.Printf("Starting nexus-go HTTP server on :%s\n", port)
 	fmt.Println("Endpoints:")
 	fmt.Println("  /healthz , /health   - Liveness probe")
-	fmt.Println("  /readyz  , /ready    - Readiness probe")
+	fmt.Println("  /readyz  , /ready    - Readiness probe (reflects successful start --execute)")
 
 	if err := http.ListenAndServe(":"+port, nil); err != nil {
 		fmt.Printf("Server failed: %v\n", err)
@@ -111,14 +129,19 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
 		NexusGoVersion, time.Now().UTC().Format(time.RFC3339))
 }
 
-// readyHandler currently returns the same as health.
-// In future versions this can include actual readiness checks
-// (e.g. mesh connected, components initialized, doctor passed, etc.)
+// readyHandler returns 200 if system is ready, 503 otherwise
 func readyHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	fmt.Fprintf(w, `{"status":"ready","service":"nexus-go","version":"%s","time":"%s"}\n`,
-		NexusGoVersion, time.Now().UTC().Format(time.RFC3339))
+
+	if isSystemReady() {
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintf(w, `{"status":"ready","service":"nexus-go","version":"%s","time":"%s"}\n`,
+			NexusGoVersion, time.Now().UTC().Format(time.RFC3339))
+	} else {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		fmt.Fprintf(w, `{"status":"not_ready","service":"nexus-go","version":"%s","time":"%s"}\n`,
+			NexusGoVersion, time.Now().UTC().Format(time.RFC3339))
+	}
 }
 
 func runDoctor() {
@@ -224,6 +247,14 @@ func runStart() {
 	}
 
 	fmt.Println("\n=== Startup orchestration complete ===")
+
+	if execute {
+		setSystemReady(true)
+		fmt.Println("[READY] System marked as ready for traffic (readiness probes will now pass).")
+	} else {
+		fmt.Println("[INFO] Dry-run completed. Use --execute to mark system as ready.")
+	}
+
 	if dryRun {
 		fmt.Println("Review the above commands and implications carefully.")
 		fmt.Println("Re-run with --execute --force to perform live actions (after backups and review).")
